@@ -1,149 +1,163 @@
-# Ejemplo de ambiente productivo
-### MLOps1 - CEIA - FIUBA
-Estructura de servicios para la implementación del proyecto final de MLOps1 - CEIA - FIUBA
+# Clasificación de crímenes de Chicago — Pipeline de MLOps
 
-Supongamos que trabajamos para **ML Models and something more Inc.**, la cual ofrece un servicio que proporciona modelos mediante una REST API. Internamente, tanto para realizar tareas de DataOps como de MLOps, la empresa cuenta con varios servicios que ayudan a ejecutar las acciones necesarias. También dispone de un Data Lake en S3, para este caso, simularemos un S3 utilizando MinIO.
+Proyecto final de MLOps1 (CEIA-FIUBA): productiviza el modelo de clasificación de
+`Primary Type` (tipo de crimen, 31 clases) desarrollado en Aprendizaje de Máquina I sobre
+datos de crímenes reportados en Chicago. Dado un incidente (lugar, beat policial, si hubo
+arresto, si fue doméstico, fecha/hora), predice el tipo de crimen.
 
-Para simular esta empresa, utilizaremos Docker y, a través de Docker Compose, desplegaremos varios contenedores que representan distintos servicios en un entorno productivo.
+## Contenido del repo
 
-Los servicios que contamos son:
-- [Apache Airflow](https://airflow.apache.org/)
-- [MLflow](https://mlflow.org/)
-- API Rest para servir modelos ([FastAPI](https://fastapi.tiangolo.com/))
-- [MinIO](https://min.io/)
-- Base de datos relacional [PostgreSQL](https://www.postgresql.org/)
-- Base de dato key-value [ValKey](https://valkey.io/) 
+- `notebook_amq1/` — notebook original de AMq1 con el EDA, la comparación de modelos
+  (árbol, bagging, Random Forest, voting) y la elección del modelo final, junto con los
+  datasets curados (`chicago_curado_train.csv`/`chicago_curado_test.csv`) que exporta y
+  con los que entrena.
+- `airflow/dags/` — DAGs de Airflow (`etl_process`, `train_model`) y el paquete
+  `amq2/` con el código compartido (curado de datos, feature engineering/encoding,
+  estimador, y el wrapper de MLflow que empaqueta encoders + modelo).
+- `dockerfiles/` — imágenes de Airflow, MLflow, Postgres y de la API (`fastapi/`, con
+  `app.py`/`schemas.py`).
+- `docker-compose.yaml` / `.env` — orquestación y configuración de todos los servicios.
+- [`ARQUITECTURA.md`](ARQUITECTURA.md) — detalle de cada componente (puertos, redes,
+  persistencia), tareas internas de los DAGs y flujo de comunicación de punta a punta.
+
+## Arquitectura
 
 ![Diagrama de servicios](final_assign.png)
 
-Por defecto, cuando se inician los multi-contenedores, se crean los siguientes buckets:
+Servicios: [Apache Airflow](https://airflow.apache.org/) (orquestación),
+[MLflow](https://mlflow.org/) (tracking + model registry),
+[MinIO](https://min.io/) (data lake / artifact store, compatible con S3),
+[PostgreSQL](https://www.postgresql.org/) (metadata de Airflow y de MLflow),
+[Valkey](https://valkey.io/) (broker de Celery para Airflow) y una API en
+[FastAPI](https://fastapi.tiangolo.com/) que sirve el modelo. El detalle completo de
+cada uno (rol, puertos, qué persiste dónde) está en [`ARQUITECTURA.md`](ARQUITECTURA.md).
 
-- `s3://data`
-- `s3://mlflow` (usada por MLflow para guardar los artefactos).
+Al levantar los servicios se crean automáticamente los buckets `s3://data` y
+`s3://mlflow`, y las bases `airflow` y `mlflow_db` en Postgres.
 
-y las siguientes bases de datos:
+## Prerrequisitos
 
-- `mlflow_db` (usada por MLflow).
-- `airflow` (usada por Airflow).
+Todo el stack corre en contenedores: **no hace falta instalar Postgres, Redis, MinIO,
+MLflow ni Airflow en tu máquina**, solo:
 
-## Tarea a realizar
+- [Docker Engine](https://docs.docker.com/engine/install/) + el plugin de Docker Compose
+  (o Docker Desktop, que ya lo incluye).
+- Recursos disponibles para el motor de Docker: al menos 4 CPUs y 8 GB de RAM. El
+  reentrenamiento del modelo (Random Forest sobre ~190k filas) es intensivo en memoria;
+  con menos de eso el DAG `train_model` puede fallar por falta de memoria.
 
-La tarea es implementar el modelo que desarrollaron en Aprendizaje de Máquina en este ambiente productivo. Para ello, pueden usar y crear los buckets y bases de datos que necesiten. Lo mínimo que deben realizar es:
+## Despliegue
 
-- Un DAG en Apache Airflow. Puede ser cualquier tarea que se desee realizar, como entrenar el modelo, un proceso ETL, etc.
-- Un experimento en MLflow de búsqueda de hiperparámetros.
-- Servir el modelo implementado en AMq1 en el servicio de RESTAPI.
-- Documentar (comentarios y docstring en scripts, notebooks, y asegurar que la documentación de FastAPI esté de acuerdo al modelo).
+1. Clonar este repositorio.
+2. Crear las carpetas que Airflow necesita y no vienen versionadas (están vacías, así
+   que Git no las trackea): `airflow/config`, `airflow/logs`, `airflow/plugins`.
+3. En Linux o macOS, en `.env`, reemplazar `AIRFLOW_UID` por tu UID
+   (`id -u <usuario>`). Si no, Airflow deja esas carpetas como root y no vas a poder
+   escribir en `airflow/logs` desde tu usuario.
+4. Levantar los servicios (la primera vez construye las imágenes, puede tardar unos
+   minutos):
 
-Desde **ML Models and something more Inc.** autorizan a extender los requisitos mínimos. También pueden utilizar nuevos servicios (por ejemplo, una base de datos no relacional, otro orquestador como MetaFlow, un servicio de API mediante NodeJs, etc.).
+   ```bash
+   docker compose --profile all up -d --build
+   ```
 
-### Ejemplo 
+5. Verificar que todos los contenedores estén `healthy` con `docker ps`.
+6. Subir el dataset crudo a MinIO (no se versiona en este repo por tamaño, ~65 MB). Con
+   los servicios arriba:
 
-El [branch `example_implementation`](https://github.com/facundolucianna/amq2-service-ml/tree/example_implementation) contiene un ejemplo de aplicación para guiarse. Se trata de una implementación de un modelo de clasificación utilizando los datos de [Heart Disease](https://archive.ics.uci.edu/dataset/45/heart+disease).
+   ```bash
+   docker run --rm --network amq2-service-ml_backend --entrypoint /bin/sh \
+     -v "/ruta/a/reported_crimes.csv:/data/reported_crimes.csv:ro" \
+     quay.io/minio/mc:latest -c "
+       mc alias set s3 http://s3:9000 minio minio123 &&
+       mc cp /data/reported_crimes.csv s3/data/raw/reported_crimes.csv
+     "
+   ```
 
-Además se cuenta con una implementación ejemplo de predicción en bache con una parte que funciona gran parte de local en [branch `batch-example`](https://github.com/facundolucianna/amq2-service-ml/tree/example_implementation)
+7. Acceder a los servicios (puertos configurables en `.env`):
+   - Airflow: http://localhost:8080 (usuario/clave `airflow`/`airflow`)
+   - MLflow: http://localhost:5011
+   - MinIO (consola de buckets): http://localhost:9011
+   - API: http://localhost:8800/ — documentación interactiva en http://localhost:8800/docs
 
-## Instalación
+8. Correr el pipeline desde la UI de Airflow: primero el DAG `etl_process`, y cuando
+   termine, `train_model` (la búsqueda de hiperparámetros + reentrenamiento final puede
+   tardar varios minutos). Al terminar, `POST /predict` en la API ya sirve el modelo
+   entrenado.
 
-1. Para poder levantar todos los servicios, primero instala [Docker](https://docs.docker.com/engine/install/) en tu computadora (o en el servidor que desees usar).
-2. Clona este repositorio.
-3. Crea las carpetas `airflow/config`, `airflow/dags`, `airflow/logs`, `airflow/plugins`, `airflow/logs`.
-4. Si estás en Linux o MacOS, en el archivo `.env`, reemplaza `AIRFLOW_UID` por el de tu usuario o alguno que consideres oportuno (para encontrar el UID, usa el comando `id -u <username>`). De lo contrario, Airflow dejará sus carpetas internas como root y no podrás subir DAGs (en `airflow/dags`) o plugins, etc.
-5. En la carpeta raíz de este repositorio, ejecuta:
-
-```bash
-docker compose --profile all up
-```
-
-6. Una vez que todos los servicios estén funcionando (verifica con el comando `docker ps -a` que todos los servicios estén healthy o revisa en Docker Desktop), podrás acceder a los diferentes servicios mediante:
-   - Apache Airflow: http://localhost:8080
-   - MLflow: http://localhost:5001
-   - MinIO: http://localhost:9001 (ventana de administración de Buckets)
-   - API: http://localhost:8800/
-   - Documentación de la API: http://localhost:8800/docs
-
-Si estás usando un servidor externo a tu computadora de trabajo, reemplaza `localhost` por su IP (puede ser una privada si tu servidor está en tu LAN o una IP pública si no; revisa firewalls u otras reglas que eviten las conexiones).
-
-Todos los puertos u otras configuraciones se pueden modificar en el archivo `.env`. Se invita a jugar y romper para aprender; siempre puedes volver a clonar este repositorio.
+Si estás en un servidor remoto en vez de tu máquina, reemplazá `localhost` por su IP.
 
 ## Apagar los servicios
-
-Estos servicios ocupan cierta cantidad de memoria RAM y procesamiento, por lo que cuando no se están utilizando, se recomienda detenerlos. Para hacerlo, ejecuta el siguiente comando:
 
 ```bash
 docker compose --profile all down
 ```
 
-Si deseas no solo detenerlos, sino también eliminar toda la infraestructura (liberando espacio en disco), utiliza el siguiente comando:
+Para además borrar los datos (buckets, bases de datos) y liberar espacio en disco:
 
 ```bash
 docker compose down --rmi all --volumes
 ```
 
-Nota: Si haces esto, perderás todo en los buckets y bases de datos.
+## Operación de Airflow
 
-## Aspectos específicos de Airflow
+- **Configuración**: las variables de Airflow están en `x-airflow-common` dentro de
+  `docker-compose.yaml` ([referencia completa](https://airflow.apache.org/docs/apache-airflow/stable/configurations-ref.html)).
+- **Executor**: Celery — las tareas corren en el contenedor `airflow-worker`, separado
+  del scheduler.
+- **CLI de Airflow** (para debugging):
 
-### Variables de entorno
-Airflow ofrece una amplia gama de opciones de configuración. En el archivo `docker-compose.yaml`, dentro de `x-airflow-common`, se encuentran variables de entorno que pueden modificarse para ajustar la configuración de Airflow. Pueden añadirse [otras variables](https://airflow.apache.org/docs/apache-airflow/stable/configurations-ref.html).
+  ```bash
+  docker compose --profile all --profile debug up -d
+  docker compose run airflow-cli dags list
+  ```
 
-### Uso de ejecutores externos
-Actualmente, para este caso, Airflow utiliza un ejecutor [celery](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/executor/celery.html), lo que significa que las tareas se ejecutan en otro contenedor. 
+  ([Referencia de comandos](https://airflow.apache.org/docs/apache-airflow/stable/cli-and-env-variables-ref.html)).
+- **Variables y conexiones**: se pueden versionar en `airflow/secrets/variables.yaml` y
+  `airflow/secrets/connections.yaml` (no aparecen en la UI, pero existen igual), o
+  cargarse desde la UI (no persisten si se borra todo). Más info:
+  [variables](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/variables.html),
+  [conexiones](https://airflow.apache.org/docs/apache-airflow/stable/authoring-and-scheduling/connections.html).
 
-### Uso de la CLI de Airflow
+## Conexión a los buckets desde tu máquina
 
-Si necesitan depurar Apache Airflow, pueden utilizar la CLI de Apache Airflow de la siguiente manera:
-
-```bash
-docker compose --profile all --profile debug up
-```
-
-Una vez que el contenedor esté en funcionamiento, pueden utilizar la CLI de Airflow de la siguiente manera, 
-por ejemplo, para ver la configuración:
-
-```bash
-docker-compose run airflow-cli config list      
-```
-
-Para obtener más información sobre el comando, pueden consultar [aqui](https://airflow.apache.org/docs/apache-airflow/stable/cli-and-env-variables-ref.html).
-
-### Variables y Conexiones
-
-Si desean agregar variables para accederlas en los DAGs, pueden hacerlo en `secrets/variables.yaml`. Para obtener más [información](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/variables.html), 
-consulten la documentación.
-
-Si desean agregar conexiones en Airflow, pueden hacerlo en `secrets/connections.yaml`. También es posible agregarlas mediante la interfaz de usuario (UI), pero estas no persistirán si se borra todo. Por otro lado, cualquier conexión guardada en `secrets/connections.yaml` no aparecerá en la UI, aunque eso no significa que no exista. Consulten la documentación para obtener más 
-[información](https://airflow.apache.org/docs/apache-airflow/stable/authoring-and-scheduling/connections.html).
-
-## Conexión con los buckets
-
-Dado que no estamos utilizando Amazon S3, sino una implementación local de los mismos mediante MinIO, es necesario modificar las variables de entorno para conectar con el servicio de MinIO. Las variables de entorno son las siguientes:
+Para usar `boto3`, `awswrangler` o `awscli` contra el MinIO de este stack desde tu
+propia máquina (por ejemplo, para explorar el dataset en un notebook local):
 
 ```bash
-AWS_ACCESS_KEY_ID=minio   
-AWS_SECRET_ACCESS_KEY=minio123 
-AWS_ENDPOINT_URL_S3=http://localhost:90000
+AWS_ACCESS_KEY_ID=minio
+AWS_SECRET_ACCESS_KEY=minio123
+AWS_ENDPOINT_URL_S3=http://localhost:9010
+MLFLOW_S3_ENDPOINT_URL=http://localhost:9010
 ```
 
-MLflow también tiene una variable de entorno que afecta su conexión a los buckets:
+Si además tenés credenciales reales de AWS configuradas, revisá que no se pisen: usando
+estas variables de entorno no debería haber conflicto.
 
-```bash
-MLFLOW_S3_ENDPOINT_URL=http://localhost:9000
-```
-Asegúrate de establecer estas variables de entorno antes de ejecutar tu notebook o scripts en tu máquina o en cualquier otro lugar. Si estás utilizando un servidor externo a tu computadora de trabajo, reemplaza localhost por su dirección IP.
+## El modelo: clasificación de crímenes de Chicago
 
-Al hacer esto, podrás utilizar `boto3`, `awswrangler`, etc., en Python con estos buckets, o `awscli` en la consola.
+- **`etl_process`**: descarga el dataset crudo desde `s3://data/raw/reported_crimes.csv`,
+  dedup por `Case Number`, split estratificado 80/20, imputación, features temporales
+  cíclicas y Binary/Ordinal Encoding (ajustados solo con train) — reproduce el curado del
+  notebook (`notebook_amq1/`). Guarda train/test curados y los encoders ajustados en
+  `s3://data/processed/`.
+- **`train_model`**: `GridSearchCV` de Random Forest (la familia de modelo elegida en el
+  notebook) sobre una submuestra estratificada (la búsqueda sobre el dataset completo
+  agotaba la memoria disponible localmente), reentrena el ganador con el train completo,
+  y registra en el Model Registry de MLflow un `mlflow.pyfunc` que empaqueta encoders +
+  clasificador (`amq2/pipeline.py`), bajo el nombre `amq2_model` con el alias `champion`.
+- **API**: `POST /predict` recibe los campos crudos del incidente (ver
+  `dockerfiles/fastapi/schemas.py`) y aplica el mismo feature engineering del
+  entrenamiento antes de predecir, sin que quien llame necesite conocer el encoding
+  interno.
 
-Si tienes acceso a AWS S3, ten mucho cuidado de no reemplazar tus credenciales de AWS. Si usas las variables de entorno, no tendrás problemas.
+Para reemplazar el dataset/modelo por otro, los 3 puntos a tocar son
+`airflow/dags/amq2/data.py` (fuente de datos), `airflow/dags/amq2/model.py` (estimador y
+grilla) y `dockerfiles/fastapi/schemas.py` (feature set expuesto por la API).
 
-## Valkey
-
-La base de datos Valkey es usada por Apache Airflow para su funcionamiento. Tal como está configurado ahora no esta expuesto el puerto para poder ser usado externamente. Se puede modificar el archivo `docker-compose.yaml` para habilitaro.
-
-## Pull Request
-
-Este repositorio está abierto para que realicen sus propios Pull Requests y así contribuir a mejorarlo. Si desean realizar alguna modificación, **¡son bienvenidos!** También se pueden crear nuevos entornos productivos para aumentar la variedad de implementaciones, idealmente en diferentes `branches`. Algunas ideas que se me ocurren que podrían implementar son:
-
-- Reemplazar Airflow y MLflow con [Metaflow](https://metaflow.org/) o [Kubeflow](https://www.kubeflow.org).
-- Reemplazar MLflow con [Seldon-Core](https://github.com/SeldonIO/seldon-core).
-- Agregar un servicio de tableros como, por ejemplo, [Grafana](https://grafana.com).
+**Nota sobre las métricas**: el modelo servido acota `max_leaf_nodes` y busca
+hiperparámetros sobre una submuestra (ver `amq2/model.py`), por las limitaciones de
+memoria del entorno local usado para correr este pipeline. Sus métricas en test
+(`f1_macro` ≈ 0.125) son algo más bajas que las del Random Forest del notebook original
+(`f1_macro` ≈ 0.171, sin esas restricciones). Con más memoria disponible, sacar esos
+límites debería acercar el resultado al del notebook.
