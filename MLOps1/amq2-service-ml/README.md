@@ -161,3 +161,17 @@ memoria del entorno local usado para correr este pipeline. Sus métricas en test
 (`f1_macro` ≈ 0.125) son algo más bajas que las del Random Forest del notebook original
 (`f1_macro` ≈ 0.171, sin esas restricciones). Con más memoria disponible, sacar esos
 límites debería acercar el resultado al del notebook.
+
+## Prueba
+post de ejemplo:
+```
+curl -X POST http://localhost:8800/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Location Description": "APARTMENT",
+    "Beat": 2432,
+    "Arrest": false,
+    "Domestic": true,
+    "Date": "2023-03-05T03:00:00"
+  }'
+```
