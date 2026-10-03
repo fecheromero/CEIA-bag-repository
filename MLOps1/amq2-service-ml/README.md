@@ -55,26 +55,37 @@ MLflow ni Airflow en tu máquina**, solo:
 ## Despliegue
 
 1. Clonar este repositorio.
-2. Crear las carpetas que Airflow necesita y no vienen versionadas (están vacías, así
-   que Git no las trackea): `airflow/config`, `airflow/logs`, `airflow/plugins`.
-3. En Linux o macOS, en `.env`, reemplazar `AIRFLOW_UID` por tu UID
+2. Entrar a la carpeta del trabajo práctico:
+
+   ```bash
+   cd MLOps1/amq2-service-ml
+   ```
+
+3. Crear las carpetas que Airflow necesita y no vienen versionadas (están vacías, así
+   que Git no las trackea):
+
+   ```bash
+   mkdir -p airflow/config airflow/logs airflow/plugins
+   ```
+
+4. En Linux o macOS, en `.env`, reemplazar `AIRFLOW_UID` por tu UID
    (`id -u <usuario>`). Si no, Airflow deja esas carpetas como root y no vas a poder
    escribir en `airflow/logs` desde tu usuario.
-4. Levantar los servicios (la primera vez construye las imágenes, puede tardar unos
+5. Levantar los servicios (la primera vez construye las imágenes, puede tardar unos
    minutos):
 
    ```bash
    docker compose --profile all up -d --build
    ```
 
-5. Verificar que todos los contenedores estén `healthy` con `docker ps`.
-6. Acceder a los servicios (puertos configurables en `.env`):
+6. Verificar que todos los contenedores estén `healthy` con `docker ps`.
+7. Acceder a los servicios (puertos configurables en `.env`):
    - Airflow: http://localhost:8080 (usuario/clave `airflow`/`airflow`)
    - MLflow: http://localhost:5011
    - MinIO (consola de buckets): http://localhost:9011
    - API: http://localhost:8800/ — documentación interactiva en http://localhost:8800/docs
 
-7. Correr el pipeline desde la UI de Airflow: primero el DAG `etl_process`, y cuando
+8. Correr el pipeline desde la UI de Airflow: primero el DAG `etl_process`, y cuando
    termine, `train_model` (la búsqueda de hiperparámetros + reentrenamiento final puede
    tardar varios minutos). Al terminar, `POST /predict` en la API ya sirve el modelo
    entrenado.
