@@ -1,4 +1,4 @@
-"""DAG de ETL: cura el dataset de crímenes de Chicago y genera train/test.
+"""DAG de ETL: descarga/curado del dataset de crímenes de Chicago y genera train/test.
 
 Reproduce el curado del TP de Aprendizaje de Máquina I (ver docstring de
 `amq2/data.py` y `amq2/features.py`): dedup, split estratificado 80/20 (antes
@@ -37,10 +37,17 @@ from amq2.features import (
     tags=["amq2", "etl"],
 )
 def etl_process():
-    """DAG: `load_and_split` -> `encode_and_save` (ver docstring del módulo)."""
+    """DAG: descarga raw -> `load_and_split` -> `encode_and_save`."""
 
     @task
-    def load_and_split() -> dict[str, str]:
+    def download_raw_dataset() -> str:
+        """Descarga el CSV crudo a MinIO si no existe."""
+        from amq2.data import download_raw_dataset as download_dataset
+
+        return download_dataset()
+
+    @task
+    def load_and_split(raw_dataset_uri: str) -> dict[str, str]:
         """Carga el dataset crudo, hace el split y deja las features listas para encodear."""
         from amq2.data import load_raw_data, split_data
         from amq2.storage import save_dataframe
@@ -81,7 +88,8 @@ def etl_process():
             "encoders.pkl",
         )
 
-    encode_and_save(load_and_split())
+    raw_dataset_uri = download_raw_dataset()
+    encode_and_save(load_and_split(raw_dataset_uri))
 
 
 etl_process()

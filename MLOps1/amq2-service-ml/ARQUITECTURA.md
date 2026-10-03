@@ -68,7 +68,7 @@ porque 9000/5001 estaban ocupados por otros procesos locales (ver `README.md`).
 | Cola de tareas Celery + resultados | Redis | En memoria, sin volumen (efímero) |
 | Runs/experimentos/métricas/parámetros de MLflow | Postgres, DB `mlflow_db` | `--backend-store-uri postgresql+psycopg://.../mlflow_db` |
 | Artefactos de MLflow (modelos serializados, pickles, encoders) | MinIO, bucket `mlflow` | `--default-artifact-root s3://mlflow/` |
-| Dataset crudo | MinIO, bucket `data`, prefijo `raw/` | `reported_crimes.csv` (subido una vez a mano) |
+| Dataset crudo | MinIO, bucket `data`, prefijo `raw/` | `reported_crimes.csv` (descargado por el DAG desde City of Chicago si no existe) |
 | Dataset curado (train/test, con y sin encodear) + encoders ajustados | MinIO, bucket `data`, prefijo `processed/` | `train_clean.csv`, `test_clean.csv`, `train.csv`, `test.csv`, `encoders.pkl` |
 | Object storage físico de MinIO | Volumen `minio_data` | Contiene ambos buckets |
 | Variables/conexiones de Airflow versionadas en código | `airflow/secrets/{variables,connections}.yaml` | Montado como `/opt/secrets`, backend `LocalFilesystemBackend` |
@@ -92,6 +92,7 @@ notebook de AMq1.
 
 | Tarea | Responsabilidad | Lee | Escribe |
 |---|---|---|---|
+| `download_raw_dataset` | Descarga el CSV crudo oficial de City of Chicago y lo guarda en MinIO si no existe | City of Chicago `Crimes - 2022` CSV export | `s3://data/raw/reported_crimes.csv` |
 | `load_and_split` | Carga el CSV crudo, dedup por `Case Number`, split 80/20 estratificado, imputa `Location Description`, deriva features temporales cíclicas | `s3://data/raw/reported_crimes.csv` | `s3://data/processed/{train,test}_clean.csv` |
 | `encode_and_save` | Ajusta Binary/Ordinal Encoder **solo con train**, encodea train y test, persiste los encoders | `train_clean.csv`, `test_clean.csv` | `train.csv`, `test.csv`, `encoders.pkl` |
 
@@ -108,7 +109,7 @@ Busca hiperparámetros de un Random Forest y registra el modelo servible.
 
 | Módulo | Responsabilidad |
 |---|---|
-| `data.py` | Acceso al dataset crudo en S3, dedup, split train/test |
+| `data.py` | Descarga idempotente del dataset crudo, acceso al CSV en S3, dedup, split train/test |
 | `features.py` | Feature engineering + encoding puro (temporal cíclico, Binary/Ordinal Encoding); **sin I/O**, para poder empaquetarse junto al modelo |
 | `model.py` | Estimador base (Random Forest) y grilla de hiperparámetros a explorar |
 | `pipeline.py` | `ChicagoCrimeModel(mlflow.pyfunc.PythonModel)`: wrapper que en `predict()` aplica `features.py` y luego el clasificador — es lo que queda registrado como `amq2_model` |
@@ -146,10 +147,11 @@ vía `code_paths` al loguearlo).
 
 ## 7. Flujo de comunicación de punta a punta
 
-1. **Carga inicial**: se sube `reported_crimes.csv` a `s3://data/raw/` (manual, una
-   sola vez).
-2. **ETL**: Airflow Worker corre `etl_process` → lee de MinIO (boto3) → escribe
-   datasets curados/encodeados + `encoders.pkl` de vuelta a MinIO.
+1. **Descarga inicial**: Airflow Worker corre `etl_process` → si
+   `s3://data/raw/reported_crimes.csv` no existe, descarga el CSV oficial de City of
+   Chicago y lo guarda en MinIO.
+2. **ETL**: el mismo DAG lee el raw de MinIO (boto3) → escribe datasets
+   curados/encodeados + `encoders.pkl` de vuelta a MinIO.
 3. **Entrenamiento**: Airflow Worker corre `train_model` → lee `train.csv`/`test.csv`
    de MinIO → entrena, y por cada run llama a MLflow (`http://mlflow:5000`) para
    loguear params/métricas/artefactos → MLflow persiste metadata en Postgres

@@ -2,8 +2,10 @@
 
 Proyecto final de MLOps1 (CEIA-FIUBA): productiviza el modelo de clasificación de
 `Primary Type` (tipo de crimen, 31 clases) desarrollado en Aprendizaje de Máquina I sobre
-datos de crímenes reportados en Chicago. Dado un incidente (lugar, beat policial, si hubo
-arresto, si fue doméstico, fecha/hora), predice el tipo de crimen.
+datos de crímenes reportados en Chicago, usando el dataset oficial
+[Crimes - 2022](https://data.cityofchicago.org/Public-Safety/Crimes-2022/9hwr-2zxp/about_data)
+de City of Chicago. Dado un incidente (lugar, beat policial, si hubo arresto, si fue
+doméstico, fecha/hora), predice el tipo de crimen.
 
 ## Contenido del repo
 
@@ -66,25 +68,13 @@ MLflow ni Airflow en tu máquina**, solo:
    ```
 
 5. Verificar que todos los contenedores estén `healthy` con `docker ps`.
-6. Subir el dataset crudo a MinIO (no se versiona en este repo por tamaño, ~65 MB). Con
-   los servicios arriba:
-
-   ```bash
-   docker run --rm --network amq2-service-ml_backend --entrypoint /bin/sh \
-     -v "/ruta/a/reported_crimes.csv:/data/reported_crimes.csv:ro" \
-     quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
-       mc alias set s3 http://s3:9000 minio minio123 &&
-       mc cp /data/reported_crimes.csv s3/data/raw/reported_crimes.csv
-     "
-   ```
-
-7. Acceder a los servicios (puertos configurables en `.env`):
+6. Acceder a los servicios (puertos configurables en `.env`):
    - Airflow: http://localhost:8080 (usuario/clave `airflow`/`airflow`)
    - MLflow: http://localhost:5011
    - MinIO (consola de buckets): http://localhost:9011
    - API: http://localhost:8800/ — documentación interactiva en http://localhost:8800/docs
 
-8. Correr el pipeline desde la UI de Airflow: primero el DAG `etl_process`, y cuando
+7. Correr el pipeline desde la UI de Airflow: primero el DAG `etl_process`, y cuando
    termine, `train_model` (la búsqueda de hiperparámetros + reentrenamiento final puede
    tardar varios minutos). Al terminar, `POST /predict` en la API ya sirve el modelo
    entrenado.
@@ -140,11 +130,11 @@ estas variables de entorno no debería haber conflicto.
 
 ## El modelo: clasificación de crímenes de Chicago
 
-- **`etl_process`**: descarga el dataset crudo desde `s3://data/raw/reported_crimes.csv`,
-  dedup por `Case Number`, split estratificado 80/20, imputación, features temporales
-  cíclicas y Binary/Ordinal Encoding (ajustados solo con train) — reproduce el curado del
-  notebook (`notebook_amq1/`). Guarda train/test curados y los encoders ajustados en
-  `s3://data/processed/`.
+- **`etl_process`**: descarga el dataset crudo oficial de City of Chicago a
+  `s3://data/raw/reported_crimes.csv` si no existe, dedup por `Case Number`, split
+  estratificado 80/20, imputación, features temporales cíclicas y Binary/Ordinal Encoding
+  (ajustados solo con train) — reproduce el curado del notebook (`notebook_amq1/`).
+  Guarda train/test curados y los encoders ajustados en `s3://data/processed/`.
 - **`train_model`**: `GridSearchCV` de Random Forest (la familia de modelo elegida en el
   notebook) sobre una submuestra estratificada (la búsqueda sobre el dataset completo
   agotaba la memoria disponible localmente), reentrena el ganador con el train completo,
