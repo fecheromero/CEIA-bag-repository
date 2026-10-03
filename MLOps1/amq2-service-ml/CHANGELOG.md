@@ -28,6 +28,7 @@ python3 scripts/generate_changelog.py
 
 ## Documentacion
 
+- 2026-10-03 `a2d23c3` mlops1: actualiza changelog
 - 2026-10-03 `8d72620` mlops1: agrega changelog e integrantes
 - 2026-09-26 `1037009` mlops1: reescribe el README (despliegue, prerrequisitos, nota sobre las métricas)
 - 2026-09-26 `aef47cf` mlops1: agrega ARQUITECTURA.md
@@ -36,6 +37,8 @@ python3 scripts/generate_changelog.py
 
 ## Build
 
+- 2026-10-03 `862f562` mlops1: agrega psutil al entorno de serving
+- 2026-10-03 `12ac02a` mlops1: alinea dependencias de entrenamiento y serving
 - 2026-10-03 `76c3e2c` mlops1: fija tags de imagenes docker
 - 2026-09-26 `e47e6de` fastapi: agrega mlflow, boto3, pandas, scikit-learn y category_encoders
 - 2026-09-26 `bbd0a5a` airflow: agrega scikit-learn, pandas y category_encoders
