@@ -72,7 +72,7 @@ MLflow ni Airflow en tu máquina**, solo:
    ```bash
    docker run --rm --network amq2-service-ml_backend --entrypoint /bin/sh \
      -v "/ruta/a/reported_crimes.csv:/data/reported_crimes.csv:ro" \
-     quay.io/minio/mc:latest -c "
+     quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
        mc alias set s3 http://s3:9000 minio minio123 &&
        mc cp /data/reported_crimes.csv s3/data/raw/reported_crimes.csv
      "

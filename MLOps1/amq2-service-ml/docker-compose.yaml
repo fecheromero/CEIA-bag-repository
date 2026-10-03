@@ -21,7 +21,7 @@
 # WARNING: This configuration is for local development. Do not use it in a production deployment.
 x-airflow-common: &airflow-common
   build: './dockerfiles/airflow'
-  image: ${AIRFLOW_IMAGE_NAME:-extending_airflow:latest}
+  image: ${AIRFLOW_IMAGE_NAME:-amq2-airflow:3.0.2}
   profiles:
     - airflow
     - all
@@ -69,7 +69,7 @@ services:
   postgres:
     restart: always
     build: './dockerfiles/postgres'
-    image: postgres_system
+    image: amq2-postgres:13
     container_name: postgres
     profiles:
       - airflow
@@ -110,7 +110,7 @@ services:
 
   s3:
     restart: always
-    image: quay.io/minio/minio:latest
+    image: madlabcg/minio:RELEASE.2026-09-22T19-25-18Z
     container_name: minio
     profiles:
       - mlflow
@@ -135,7 +135,7 @@ services:
       retries: 3
 
   create_s3_buckets:
-    image: quay.io/minio/mc:latest
+    image: madlabcg/minio:RELEASE.2026-09-22T19-25-18Z
     container_name: minio_create_bucket
     profiles:
       - mlflow
@@ -157,7 +157,7 @@ services:
   mlflow:
     restart: always
     build: "./dockerfiles/mlflow"
-    image: mlflow
+    image: amq2-mlflow:2.22.5
     container_name: mlflow
     profiles:
       - mlflow
@@ -190,7 +190,7 @@ services:
   fastapi:
     restart: always
     build: "./dockerfiles/fastapi"
-    image: backend_fastapi
+    image: amq2-fastapi:0.1.0
     container_name: fastapi
     profiles:
       - all
