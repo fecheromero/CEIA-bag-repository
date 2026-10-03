@@ -1,9 +1,11 @@
-psycopg2-binary
-boto3
+mlflow[extras]==2.22.5
+psycopg[binary]==3.2.13
+sqlalchemy==2.0.44
+boto3~=1.34
 cryptography
 pymysql
-pandas
+pandas~=2.2
 numpy
 matplotlib
 seaborn
-scikit-learn
+scikit-learn~=1.4

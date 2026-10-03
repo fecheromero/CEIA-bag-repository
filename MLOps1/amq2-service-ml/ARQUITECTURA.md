@@ -66,7 +66,7 @@ porque 9000/5001 estaban ocupados por otros procesos locales (ver `README.md`).
 |---|---|---|
 | Metadata de Airflow (DAGs, runs, tareas, usuarios, conexiones) | Postgres, DB `airflow` | Volumen `db_data` |
 | Cola de tareas Celery + resultados | Redis | En memoria, sin volumen (efímero) |
-| Runs/experimentos/métricas/parámetros de MLflow | Postgres, DB `mlflow_db` | `--backend-store-uri postgresql://.../mlflow_db` |
+| Runs/experimentos/métricas/parámetros de MLflow | Postgres, DB `mlflow_db` | `--backend-store-uri postgresql+psycopg://.../mlflow_db` |
 | Artefactos de MLflow (modelos serializados, pickles, encoders) | MinIO, bucket `mlflow` | `--default-artifact-root s3://mlflow/` |
 | Dataset crudo | MinIO, bucket `data`, prefijo `raw/` | `reported_crimes.csv` (subido una vez a mano) |
 | Dataset curado (train/test, con y sin encodear) + encoders ajustados | MinIO, bucket `data`, prefijo `processed/` | `train_clean.csv`, `test_clean.csv`, `train.csv`, `test.csv`, `encoders.pkl` |
