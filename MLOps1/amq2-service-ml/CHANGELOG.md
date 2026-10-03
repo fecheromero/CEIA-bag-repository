@@ -28,6 +28,8 @@ python3 scripts/generate_changelog.py
 
 ## Documentacion
 
+- 2026-10-03 `39d2572` mlops1: aclara pasos de despliegue
+- 2026-10-03 `a75be03` mlops1: actualiza changelog
 - 2026-10-03 `a2d23c3` mlops1: actualiza changelog
 - 2026-10-03 `8d72620` mlops1: agrega changelog e integrantes
 - 2026-09-26 `1037009` mlops1: reescribe el README (despliegue, prerrequisitos, nota sobre las métricas)
