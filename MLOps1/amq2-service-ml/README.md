@@ -8,9 +8,7 @@ arresto, si fue doméstico, fecha/hora), predice el tipo de crimen.
 ## Contenido del repo
 
 - `notebook_amq1/` — notebook original de AMq1 con el EDA, la comparación de modelos
-  (árbol, bagging, Random Forest, voting) y la elección del modelo final, junto con los
-  datasets curados (`chicago_curado_train.csv`/`chicago_curado_test.csv`) que exporta y
-  con los que entrena.
+  (árbol, bagging, Random Forest, voting) y la elección del modelo final.
 - `airflow/dags/` — DAGs de Airflow (`etl_process`, `train_model`) y el paquete
   `amq2/` con el código compartido (curado de datos, feature engineering/encoding,
   estimador, y el wrapper de MLflow que empaqueta encoders + modelo).
@@ -19,6 +17,12 @@ arresto, si fue doméstico, fecha/hora), predice el tipo de crimen.
 - `docker-compose.yaml` / `.env` — orquestación y configuración de todos los servicios.
 - [`ARQUITECTURA.md`](ARQUITECTURA.md) — detalle de cada componente (puertos, redes,
   persistencia), tareas internas de los DAGs y flujo de comunicación de punta a punta.
+- [`CHANGELOG.md`](CHANGELOG.md) — historial generado desde los commits del trabajo.
+
+## Integrantes
+
+- Ailen Muñoz
+- Federico Romero
 
 ## Arquitectura
 
@@ -175,3 +179,14 @@ curl -X POST http://localhost:8800/predict \
     "Date": "2023-03-05T03:00:00"
   }'
 ```
+
+## Changelog
+
+El changelog se genera desde el historial de Git para evitar mantenerlo a mano:
+
+```bash
+python3 scripts/generate_changelog.py
+```
+
+El script toma los commits que afectan a este proyecto y los agrupa por tipo
+(`feat`, `fix`, `docs`, `build`, `chore`, etc.).
