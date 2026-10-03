@@ -30,23 +30,49 @@ MODEL_ALIAS = os.environ.get("MODEL_ALIAS", "champion")
 model_state: dict[str, Any] = {"model": None, "version": None}
 
 
+def refresh_model_if_needed() -> Any:
+    """Carga el modelo champion si falta o si el alias cambió de versión."""
+    client = MlflowClient()
+    try:
+        model_version = client.get_model_version_by_alias(MODEL_NAME, MODEL_ALIAS)
+    except Exception as exc:
+        model_state["model"] = None
+        model_state["version"] = None
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"No hay ningún modelo registrado como '{MODEL_NAME}@{MODEL_ALIAS}'. "
+                "Correr los DAGs 'etl_process' y 'train_model' en Airflow primero."
+            ),
+        ) from exc
+
+    version = str(model_version.version)
+    if model_state["model"] is None or model_state["version"] != version:
+        model_uri = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
+        logger.info("Cargando modelo '%s@%s' version %s", MODEL_NAME, MODEL_ALIAS, version)
+        try:
+            model = mlflow.pyfunc.load_model(model_uri)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No se pudo cargar el modelo '{MODEL_NAME}@{MODEL_ALIAS}' version {version}.",
+            ) from exc
+        model_state["model"] = model
+        model_state["version"] = version
+
+    return model_state["model"]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Al arrancar, carga el modelo `MODEL_NAME@MODEL_ALIAS` desde el MLflow Model Registry."""
+    """Configura MLflow y precarga el modelo si ya existe en el Model Registry."""
     mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
     try:
-        model_uri = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
-        model_state["model"] = mlflow.pyfunc.load_model(model_uri)
-        client = MlflowClient()
-        model_state["version"] = client.get_model_version_by_alias(
-            MODEL_NAME, MODEL_ALIAS
-        ).version
+        refresh_model_if_needed()
     except Exception:
         # Si todavía no se corrió `train_model`, no hay modelo registrado.
         # Se deja el servicio arriba (para healthcheck) y se falla recién en /predict.
         logger.exception("No se pudo cargar el modelo '%s@%s'", MODEL_NAME, MODEL_ALIAS)
-        model_state["model"] = None
-        model_state["version"] = None
     yield
 
 
@@ -72,15 +98,7 @@ def predict(request: PredictRequest) -> PredictResponse:
     engineering/encoding del entrenamiento (ver `amq2/pipeline.py`) antes de
     predecir, generado por los DAGs `etl_process` + `train_model` de Airflow.
     """
-    model = model_state["model"]
-    if model is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                f"No hay ningún modelo registrado como '{MODEL_NAME}@{MODEL_ALIAS}'. "
-                "Correr los DAGs 'etl_process' y 'train_model' en Airflow primero."
-            ),
-        )
+    model = refresh_model_if_needed()
 
     case = pd.DataFrame([request.model_dump(by_alias=True)])
     prediction = model.predict(case)[0]

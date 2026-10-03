@@ -136,7 +136,7 @@ Código en `dockerfiles/fastapi/`.
 
 | Archivo | Responsabilidad |
 |---|---|
-| `app.py` | App FastAPI. En el `lifespan` (startup) carga `models:/{MODEL_NAME}@{MODEL_ALIAS}` desde MLflow. Expone `GET /` (healthcheck) y `POST /predict` |
+| `app.py` | App FastAPI. Configura MLflow en el `lifespan` y en `POST /predict` carga `models:/{MODEL_NAME}@{MODEL_ALIAS}` si falta o si el alias cambió de versión. Expone `GET /` (healthcheck) y `POST /predict` |
 | `schemas.py` | `PredictRequest`/`PredictResponse` — los campos crudos de un incidente (`Location Description`, `Beat`, `Arrest`, `Domestic`, `Date`), no las features codificadas |
 
 FastAPI no sabe nada de encoders ni de las 25 columnas del modelo: le pasa el
@@ -155,9 +155,10 @@ vía `code_paths` al loguearlo).
    loguear params/métricas/artefactos → MLflow persiste metadata en Postgres
    (`mlflow_db`) y los archivos en MinIO (bucket `mlflow`) → al final registra la
    versión y mueve el alias `champion`.
-4. **Serving**: al arrancar, FastAPI le pide a MLflow (`http://mlflow:5000`) la
-   versión con alias `champion`; MLflow resuelve los artefactos desde MinIO y
-   FastAPI los descarga y carga en memoria.
+4. **Serving**: FastAPI le pide a MLflow (`http://mlflow:5000`) la versión con
+   alias `champion` al arrancar si existe, y vuelve a verificarla en cada
+   `POST /predict`; si el alias apunta a una versión nueva, recarga el `pyfunc`
+   desde los artefactos de MinIO.
 5. **Inferencia**: un cliente HTTP pega a `POST http://localhost:8800/predict`;
    FastAPI arma un DataFrame con los campos crudos, se lo pasa al `pyfunc` cargado
    (que encodea + predice in-process, sin más llamadas de red) y devuelve la
