@@ -9,6 +9,7 @@ python3 scripts/generate_changelog.py
 
 ## Features
 
+- 2026-10-03 `87927bb` mlops1: descarga dataset crudo en dag
 - 2026-09-26 `00958fd` fastapi: carga el modelo champion y expone POST /predict
 - 2026-09-26 `9061d8e` fastapi: schema PredictRequest con los campos crudos del incidente
 - 2026-09-26 `901668a` airflow: DAG train_model (búsqueda en MLflow y registro como champion)
@@ -19,8 +20,15 @@ python3 scripts/generate_changelog.py
 - 2026-09-26 `ce69967` amq2: carga y dedup del dataset crudo de crímenes de Chicago
 - 2026-09-26 `4791bea` amq2: helpers de lectura/escritura en MinIO
 
+## Fixes
+
+- 2026-10-03 `8891dfa` mlops1: usa psycopg2 para backend de mlflow
+- 2026-10-03 `2f4746c` fastapi: recarga modelo champion en predict
+- 2026-10-03 `1e81ad8` mlops1: fija mlflow y driver postgres
+
 ## Documentacion
 
+- 2026-10-03 `8d72620` mlops1: agrega changelog e integrantes
 - 2026-09-26 `1037009` mlops1: reescribe el README (despliegue, prerrequisitos, nota sobre las métricas)
 - 2026-09-26 `aef47cf` mlops1: agrega ARQUITECTURA.md
 - 2026-09-26 `1d3c24d` mlops1: agrega los datasets curados de train/test
@@ -28,6 +36,7 @@ python3 scripts/generate_changelog.py
 
 ## Build
 
+- 2026-10-03 `76c3e2c` mlops1: fija tags de imagenes docker
 - 2026-09-26 `e47e6de` fastapi: agrega mlflow, boto3, pandas, scikit-learn y category_encoders
 - 2026-09-26 `bbd0a5a` airflow: agrega scikit-learn, pandas y category_encoders
 
